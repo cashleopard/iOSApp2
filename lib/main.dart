@@ -38,7 +38,7 @@ class _WebViewPageState extends State<WebViewPage> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(Uri.parse('https://blissful-goldstine-cea5cb.netlify.app/'));
+      ..loadRequest(Uri.parse('https://etudiantsfiche.org/'));
   }
 
   @override
