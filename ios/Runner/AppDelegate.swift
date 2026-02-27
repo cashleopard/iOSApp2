@@ -12,63 +12,82 @@ import CoreTelephony
 
     GeneratedPluginRegistrant.register(with: self)
 
-    if let controller = window?.rootViewController as? FlutterViewController {
-      let channel = FlutterMethodChannel(
-        name: "sim_info",
-        binaryMessenger: controller.binaryMessenger
-      )
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      print("❌ rootViewController is not FlutterViewController / window is nil")
+      return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
 
-      channel.setMethodCallHandler { call, result in
-        guard call.method == "getMccMnc" else {
-          result(FlutterMethodNotImplemented)
-          return
+    let channel = FlutterMethodChannel(name: "sim_info", binaryMessenger: controller.binaryMessenger)
+
+    channel.setMethodCallHandler { call, result in
+      print("✅ MethodChannel call received: \(call.method)")
+
+      guard call.method == "getMccMnc" else {
+        DispatchQueue.main.async { result(FlutterMethodNotImplemented) }
+        return
+      }
+
+      let networkInfo = CTTelephonyNetworkInfo()
+
+      if #available(iOS 13.0, *) {
+        let providers = networkInfo.serviceSubscriberCellularProviders ?? [:]
+        print("📡 providers count: \(providers.count)")
+
+        var all: [[String: Any]] = []
+        for (key, carrier) in providers {
+          let item: [String: Any] = [
+            "serviceId": key,
+            "carrierName": carrier.carrierName ?? "nil",
+            "mcc": carrier.mobileCountryCode ?? "nil",
+            "mnc": carrier.mobileNetworkCode ?? "nil",
+            "isoCountryCode": carrier.isoCountryCode ?? "nil"
+          ]
+          all.append(item)
+          print("📶 provider \(key): \(item)")
         }
 
-        let networkInfo = CTTelephonyNetworkInfo()
+        let primary = all.first(where: { ($0["mcc"] as? String) != "nil" && ($0["mnc"] as? String) != "nil" })
+          ?? all.first
+          ?? [:]
 
-        if #available(iOS 13.0, *) {
-          let providers = networkInfo.serviceSubscriberCellularProviders ?? [:]
+        let payload: [String: Any] = [
+          "ok": true,
+          "providersCount": all.count,
+          "primary": primary,
+          "all": all
+        ]
 
-          var all: [[String: Any]] = []
+        DispatchQueue.main.async { result(payload) }
+        return
+      }
 
-          for (key, carrier) in providers {
-            all.append([
-              "serviceId": key,
-              "carrierName": carrier.carrierName ?? "",
-              "mcc": carrier.mobileCountryCode ?? "",
-              "mnc": carrier.mobileNetworkCode ?? "",
-              "isoCountryCode": carrier.isoCountryCode ?? ""
-            ])
-          }
+      // iOS 12 fallback (won't run on iPhone 12 usually)
+      if let carrier = networkInfo.subscriberCellularProvider {
+        let primary: [String: Any] = [
+          "serviceId": "subscriberCellularProvider",
+          "carrierName": carrier.carrierName ?? "nil",
+          "mcc": carrier.mobileCountryCode ?? "nil",
+          "mnc": carrier.mobileNetworkCode ?? "nil",
+          "isoCountryCode": carrier.isoCountryCode ?? "nil"
+        ]
 
-          let primary = all.first ?? [:]
+        let payload: [String: Any] = [
+          "ok": true,
+          "providersCount": 1,
+          "primary": primary,
+          "all": [primary]
+        ]
 
-          result([
-            "primary": primary,
-            "all": all
-          ])
-
-        } else {
-          if let carrier = networkInfo.subscriberCellularProvider {
-            let primary: [String: Any] = [
-              "serviceId": "subscriberCellularProvider",
-              "carrierName": carrier.carrierName ?? "",
-              "mcc": carrier.mobileCountryCode ?? "",
-              "mnc": carrier.mobileNetworkCode ?? "",
-              "isoCountryCode": carrier.isoCountryCode ?? ""
-            ]
-
-            result([
-              "primary": primary,
-              "all": [primary]
-            ])
-          } else {
-            result([
-              "primary": [:],
-              "all": []
-            ])
-          }
-        }
+        DispatchQueue.main.async { result(payload) }
+      } else {
+        let payload: [String: Any] = [
+          "ok": false,
+          "error": "NO_CARRIER",
+          "providersCount": 0,
+          "primary": [:],
+          "all": []
+        ]
+        DispatchQueue.main.async { result(payload) }
       }
     }
 
