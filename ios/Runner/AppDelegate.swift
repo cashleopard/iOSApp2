@@ -12,7 +12,6 @@ import CoreTelephony
 
     GeneratedPluginRegistrant.register(with: self)
 
-    // MethodChannel to expose SIM MCC/MNC to Flutter
     if let controller = window?.rootViewController as? FlutterViewController {
       let channel = FlutterMethodChannel(
         name: "sim_info",
@@ -28,53 +27,44 @@ import CoreTelephony
         let networkInfo = CTTelephonyNetworkInfo()
 
         if #available(iOS 13.0, *) {
-          // Dual-SIM capable: return all providers, plus a "primary" best guess
           let providers = networkInfo.serviceSubscriberCellularProviders ?? [:]
 
           var all: [[String: Any]] = []
+
           for (key, carrier) in providers {
             all.append([
               "serviceId": key,
-              "carrierName": carrier.carrierName ?? NSNull(),
-              "mcc": carrier.mobileCountryCode ?? NSNull(),
-              "mnc": carrier.mobileNetworkCode ?? NSNull(),
-              "isoCountryCode": carrier.isoCountryCode ?? NSNull()
+              "carrierName": carrier.carrierName ?? "",
+              "mcc": carrier.mobileCountryCode ?? "",
+              "mnc": carrier.mobileNetworkCode ?? "",
+              "isoCountryCode": carrier.isoCountryCode ?? ""
             ])
           }
 
-          // Pick first non-nil MCC/MNC as "primary"
-          let primary = all.first { item in
-            let mcc = item["mcc"]
-            let mnc = item["mnc"]
-            return !(mcc is NSNull) && !(mnc is NSNull)
-          } ?? all.first
+          let primary = all.first ?? [:]
 
           result([
-            "primary": primary ?? NSNull(),
+            "primary": primary,
             "all": all
           ])
+
         } else {
-          // iOS 12 and below
           if let carrier = networkInfo.subscriberCellularProvider {
+            let primary: [String: Any] = [
+              "serviceId": "subscriberCellularProvider",
+              "carrierName": carrier.carrierName ?? "",
+              "mcc": carrier.mobileCountryCode ?? "",
+              "mnc": carrier.mobileNetworkCode ?? "",
+              "isoCountryCode": carrier.isoCountryCode ?? ""
+            ]
+
             result([
-              "primary": [
-                "serviceId": "subscriberCellularProvider",
-                "carrierName": carrier.carrierName ?? NSNull(),
-                "mcc": carrier.mobileCountryCode ?? NSNull(),
-                "mnc": carrier.mobileNetworkCode ?? NSNull(),
-                "isoCountryCode": carrier.isoCountryCode ?? NSNull()
-              ],
-              "all": [[
-                "serviceId": "subscriberCellularProvider",
-                "carrierName": carrier.carrierName ?? NSNull(),
-                "mcc": carrier.mobileCountryCode ?? NSNull(),
-                "mnc": carrier.mobileNetworkCode ?? NSNull(),
-                "isoCountryCode": carrier.isoCountryCode ?? NSNull()
-              ]]
+              "primary": primary,
+              "all": [primary]
             ])
           } else {
             result([
-              "primary": NSNull(),
+              "primary": [:],
               "all": []
             ])
           }
