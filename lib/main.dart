@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -29,15 +30,59 @@ class _SimDebugPageState extends State<SimDebugPage> {
 
   Future<void> refresh() async {
     setState(() => status = "Calling iOS...");
+
+    // Retry a few times because telephony can be empty right after app start
+    const attempts = 5;
+    const delay = Duration(milliseconds: 600);
+
+    for (int i = 1; i <= attempts; i++) {
+      try {
+        final res = await _channel.invokeMethod('getMccMnc');
+
+        // Pretty print if it's a map
+        final pretty = _pretty(res);
+
+        setState(() => status = "✅ Attempt $i/$attempts:\n$pretty");
+        // ignore: avoid_print
+        print("✅ Attempt $i/$attempts: $res");
+
+        // Stop early if we actually got a carrierName or MCC/MNC
+        if (_looksUseful(res)) return;
+
+        if (i < attempts) {
+          await Future.delayed(delay);
+        }
+      } catch (e) {
+        setState(() => status = "❌ Error (attempt $i/$attempts):\n$e");
+        // ignore: avoid_print
+        print("❌ Error: $e");
+        return;
+      }
+    }
+  }
+
+  bool _looksUseful(dynamic res) {
+    if (res is Map) {
+      final primary = res["primary"];
+      if (primary is Map) {
+        final carrierName = primary["carrierName"];
+        final mcc = primary["mcc"];
+        final mnc = primary["mnc"];
+        if (carrierName is String && carrierName.trim().isNotEmpty) return true;
+        if (mcc is String && mcc.isNotEmpty && mnc is String && mnc.isNotEmpty) return true;
+      }
+    }
+    return false;
+  }
+
+  String _pretty(dynamic res) {
     try {
-      final res = await _channel.invokeMethod('getMccMnc');
-      setState(() => status = "✅ Response:\n$res");
-      // ignore: avoid_print
-      print("✅ Response: $res");
-    } catch (e) {
-      setState(() => status = "❌ Error:\n$e");
-      // ignore: avoid_print
-      print("❌ Error: $e");
+      if (res is Map || res is List) {
+        return const JsonEncoder.withIndent("  ").convert(res);
+      }
+      return res.toString();
+    } catch (_) {
+      return res.toString();
     }
   }
 
